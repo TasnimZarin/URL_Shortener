@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URL Shortener</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-8">
+
+  <div class="max-w-3xl mx-auto">
+    <h1 class="text-4xl font-bold text-center mb-8 text-blue-400">URL Shortener</h1>
+
+    <!-- Shorten URL Section -->
+    <div class="bg-gray-800 p-6 rounded-xl shadow mb-8">
+      <h2 class="text-xl font-semibold mb-4">Shorten a URL</h2>
+      <div class="flex gap-3">
+        <input
+          type="text"
+          id="url-input"
+          placeholder="https://example.com"
+          class="flex-1 p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:outline-none focus:border-blue-400"
+        />
+        <button
+          onclick="shortenURL()"
+          class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold"
+        >
+          Shorten
+        </button>
+      </div>
+      <div id="result" class="mt-4 hidden">
+        <p class="text-gray-400 text-sm mb-1">Your short URL:</p>
+        <a id="short-url" href="#" target="_blank" class="text-blue-400 text-lg font-semibold hover:underline"></a>
+      </div>
+      <div id="error" class="mt-4 hidden text-red-400"></div>
+    </div>
+
+    <!-- Stats Table -->
+    <div class="bg-gray-800 p-6 rounded-xl shadow mb-8">
+      <h2 class="text-xl font-semibold mb-4">Top Links</h2>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 border-b border-gray-700">
+            <th class="text-left py-2">Original URL</th>
+            <th class="text-left py-2">Short Code</th>
+            <th class="text-left py-2">Clicks</th>
+            <th class="text-left py-2">Created</th>
+          </tr>
+        </thead>
+        <tbody id="links-table"></tbody>
+      </table>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-gray-800 p-6 rounded-xl shadow">
+      <h2 class="text-xl font-semibold mb-4">Clicks per Link</h2>
+      <canvas id="clicks-chart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const BASE_URL = "http://127.0.0.1:8000"
+    let chart = null
+
+    async function shortenURL() {
+      const input = document.getElementById("url-input")
+      const result = document.getElementById("result")
+      const error = document.getElementById("error")
+      const shortUrlEl = document.getElementById("short-url")
+
+      result.classList.add("hidden")
+      error.classList.add("hidden")
+
+      try {
+        const response = await fetch(`${BASE_URL}/shorten`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: input.value })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          error.textContent = "Invalid URL. Please enter a valid URL starting with https://"
+          error.classList.remove("hidden")
+          return
+        }
+
+        const shortURL = `${BASE_URL}/${data.short_code}`
+        shortUrlEl.textContent = shortURL
+        shortUrlEl.href = shortURL
+        result.classList.remove("hidden")
+        input.value = ""
+        loadLinks()
+
+      } catch (err) {
+        error.textContent = "Something went wrong. Try again."
+        error.classList.remove("hidden")
+      }
+    }
+
+    async function loadLinks() {
+      try {
+        const response = await fetch(`${BASE_URL}/links?limit=10`)
+        const links = await response.json()
+
+        const tbody = document.getElementById("links-table")
+        tbody.innerHTML = ""
+
+        links.forEach(link => {
+          const date = new Date(link.created_at).toLocaleDateString()
+          tbody.innerHTML += `
+            <tr class="border-b border-gray-700 hover:bg-gray-700">
+              <td class="py-2 max-w-xs truncate">
+                <a href="${link.original_url}" target="_blank" class="text-blue-400 hover:underline">
+                  ${link.original_url}
+                </a>
+              </td>
+              <td class="py-2">
+                <a href="${BASE_URL}/${link.short_code}" target="_blank" class="text-green-400 hover:underline">
+                  ${link.short_code}
+                </a>
+              </td>
+              <td class="py-2">${link.click_count}</td>
+              <td class="py-2 text-gray-400">${date}</td>
+            </tr>
+          `
+        })
+
+        updateChart(links)
+
+      } catch (err) {
+        console.error("Failed to load links:", err)
+      }
+    }
+
+    function updateChart(links) {
+      const labels = links.map(l => l.short_code)
+      const data = links.map(l => l.click_count)
+
+      if (chart) chart.destroy()
+
+      chart = new Chart(document.getElementById("clicks-chart"), {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Clicks",
+            data: data,
+            backgroundColor: "rgba(59, 130, 246, 0.7)",
+            borderColor: "rgba(59, 130, 246, 1)",
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { labels: { color: "white" } }
+          },
+          scales: {
+            x: { ticks: { color: "white" }, grid: { color: "rgba(255,255,255,0.1)" } },
+            y: { ticks: { color: "white" }, grid: { color: "rgba(255,255,255,0.1)" }, beginAtZero: true }
+          }
+        }
+      })
+    }
+
+    loadLinks()
+  </script>
+
+</body>
+</html>
